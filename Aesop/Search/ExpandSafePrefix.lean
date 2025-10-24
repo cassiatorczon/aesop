@@ -78,4 +78,15 @@ def expandSafePrefix : SearchM Q Bool := do
     else
       throw e
 
+def expandSafePrefixForGoal (g : GoalRef) : SearchM Q Bool := do
+  aesop_trace[steps] "Expanding safe subtree of the root goal."
+  try
+    expandSafePrefixGoal g |>.run' {}
+    return true
+  catch e =>
+    if isSafeExpansionFailedException e then
+      return false
+    else
+      throw e
+
 end Aesop
