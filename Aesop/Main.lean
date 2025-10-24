@@ -38,4 +38,29 @@ where
         replaceMainGoal goals.toList
         modifyStats λ _ => stats
 
+@[tactic Frontend.Parser.stepAesopTactic, tactic Frontend.Parser.stepAesopTactic?]
+def stepAesop : Tactic := λ stx => do
+  profileitM Exception "aesop" (← getOptions) do
+  let goal ← getMainGoal
+  goal.withContext do
+    let (_, stats) ← go stx goal |>.run ∅
+    recordStatsForCurrentFileIfEnabled stx stats
+    stats.trace .stats
+where
+  go (stx : Syntax) (goal : MVarId) : StateRefT Stats TacticM Unit :=
+    profiling (λ s _ t => { s with total := t }) do
+      let config ← profiling (λ s _ t => { s with configParsing := t }) do
+        Frontend.TacticConfig.parse stx goal
+      let ruleSet ←
+        profiling (λ s _ t => { s with ruleSetConstruction := t }) do
+          config.getRuleSet goal
+      withConstAesopTraceNode .ruleSet (return "Rule set") do
+        ruleSet.trace .ruleSet
+      profiling (λ s _ t => { s with search := t }) do
+        let (goals, stats) ←
+          search goal ruleSet config.options config.simpConfig --
+            config.simpConfigSyntax? (← getStats)
+        replaceMainGoal goals.toList
+        modifyStats λ _ => stats
+
 end Aesop

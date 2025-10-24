@@ -58,9 +58,44 @@ syntax (name := aesopTactic)  "aesop"  Aesop.tactic_clause* : tactic
 @[inherit_doc aesopTactic]
 syntax (name := aesopTactic?) "aesop?" Aesop.tactic_clause* : tactic
 
+/--
+`step_aesop <clause>*` takes one "step" toward solving the current goal by
+applying one of a set of rules registered with the `@[aesop]` attribute.
+It is equivalent to one rule application of aesop. See [aesop's
+README](https://github.com/JLimperg/aesop#readme) for a tutorial and a
+reference.
+
+The variant `step_aesop?` prints the proof it found as a `Try this` suggestion.
+
+Clauses can be used to customise the behaviour of a step_aesop call. Available
+clauses are:
+
+- `(add <phase> <priority> <builder> <rule>)` adds a rule. `<phase>` is
+  `unsafe`, `safe` or `norm`. `<priority>` is a percentage for unsafe rules and
+  an integer for safe and norm rules. `<rule>` is the name of a declaration or
+  local hypothesis. `<builder>` is the rule builder used to turn `<rule>` into
+  an Aesop rule. Example: `(add unsafe 50% apply Or.inl)`.
+- `(erase <rule>)` disables a globally registered Aesop rule. Example: `(erase
+  Aesop.BuiltinRules.assumption)`.
+- `(rule_sets := [<ruleset>,*])` enables or disables named sets of rules for
+  this Aesop call. Example: `(rule_sets := [-builtin, MyRuleSet])`.
+- `(config { <opt> := <value> })` adjusts Aesop's search options. See
+  `Aesop.Options`.
+- `(simp_config { <opt> := <value> })` adjusts options for Aesop's built-in
+  `simp` rule. The given options are directly passed to `simp`. For example,
+  `(simp_config := { zeta := false })` makes Aesop use
+  `simp (config := { zeta := false })`.
+-/
+syntax (name := stepAesopTactic)  "step_aesop"  Aesop.tactic_clause* : tactic
+
+@[inherit_doc stepAesopTactic]
+syntax (name := stepAesopTactic?) "step_aesop?" Aesop.tactic_clause* : tactic
+
 initialize do
   Batteries.Linter.UnreachableTactic.addIgnoreTacticKind ``aesopTactic
   Batteries.Linter.UnreachableTactic.addIgnoreTacticKind ``aesopTactic?
+  Batteries.Linter.UnreachableTactic.addIgnoreTacticKind ``stepAesopTactic
+  Batteries.Linter.UnreachableTactic.addIgnoreTacticKind ``stepAesopTactic?
 
 end Parser
 
@@ -99,6 +134,10 @@ def parse (stx : Syntax) (goal : MVarId) : TermElabM TacticConfig :=
       go (traceScript := false) clauses
     | `(tactic| aesop? $clauses:Aesop.tactic_clause*) =>
       go (traceScript := true) clauses
+    | `(tactic| step_aesop $clauses:Aesop.tactic_clause*) =>
+      go (traceScript := false) clauses
+    | `(tactic| step_aesop? $clauses:Aesop.tactic_clause*) =>
+      go (traceScript := true) clauses
     | _ => throwUnsupportedSyntax
   where
     go (traceScript : Bool) (clauses : Array (TSyntax `Aesop.tactic_clause)) :
@@ -123,7 +162,7 @@ def parse (stx : Syntax) (goal : MVarId) : TermElabM TacticConfig :=
             pure { : Simp.ConfigCtx}.toConfig
           else
             pure { : Simp.Config }
-        return { config with simpConfig }
+      return { config with simpConfig }
 
     addClause (traceScript : Bool) (stx : TSyntax `Aesop.tactic_clause) :
         StateRefT TacticConfig TermElabM Unit :=
