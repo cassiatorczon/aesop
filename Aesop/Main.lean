@@ -39,14 +39,25 @@ where
         modifyStats λ _ => stats
 
 @[tactic Frontend.Parser.stepAesopTactic, tactic Frontend.Parser.stepAesopTactic?]
-def stepAesop : Tactic := λ stx => do
+def evalStepAesop : Tactic := λ stx => do
   let goal ← getMainGoal
   goal.withContext do
+    goal.checkNotAssigned `aesop
     let config ← Frontend.TacticConfig.parse stx goal
     let ruleSet ← config.getRuleSet goal
   --  withConstAesopTraceNode .ruleSet (return "Rule set") do
   --    ruleSet.trace .ruleSet
-    let goals ← searchStep goal ruleSet config.options config.simpConfig
+    let options :=
+      {config.options with
+       maxRuleApplicationDepth := 0,
+       maxRuleApplications := 0,
+       maxGoals := 0,
+       --  maxSafePrefixRuleApplications := 0,
+       terminal := false,
+       warnOnNonterminal := false,
+      --  traceScript := true
+       }
+    let goals ← searchStep goal ruleSet options config.simpConfig
     replaceMainGoal goals.toList
 
 end Aesop

@@ -82,60 +82,60 @@ def expandNextGoal : SearchM Q Unit := do
                 withAesopTraceNode .steps (λ _ => return "Metadata") do
                   g.traceMetadata .steps
 
-def expandNextGoal' : SearchM Q (Array GoalRef) := do
-  let gref ← nextActiveGoal
-  let g ← gref.get
-  let (initialGoal, initialMetaState) ←
-    g.currentGoalAndMetaState (← getRootMetaState)
-  let result ← withAesopTraceNode .steps
-    (fmt g.id g.priority initialGoal initialMetaState) do
-    initialMetaState.runMetaM' do
-      aesop_trace[steps] "Initial goal:{indentD initialGoal}"
-    let maxRappDepth := (← read).options.maxRuleApplicationDepth
-    if maxRappDepth != 0 && (← gref.get).depth >= maxRappDepth then
-      aesop_trace[steps] "Treating the goal as unprovable since it is beyond the maximum rule application depth ({maxRappDepth})."
-      gref.markForcedUnprovable
-      setMaxRuleApplicationDepthReached
-      return .failed
-    let result ← expandGoal gref
-    let currentIteration ← getIteration
-    gref.modify λ g => g.setLastExpandedInIteration currentIteration
-    if ← (← gref.get).isActive then
-      enqueueGoals #[gref]
-    return result
-  match result with
-  | .proved newRapps | .succeeded newRapps =>
-    traceNewRapps newRapps
-    let rs ← newRapps.mapM (·.get)
-    let grs ← rs.flatMapM (·.subgoals)
-    let activeGrs ← grs.filterM (fun g => do (← g.get).isActive)
-    return activeGrs
-  | .failed => return #[]
-  where
-    fmt (id : GoalId) (priority : Percent) (initialGoal : MVarId)
-        (initialMetaState : Meta.SavedState)
-        (result : Except Exception RuleResult) : SearchM Q MessageData := do
-      let tgt ← initialMetaState.runMetaM' do
-        initialGoal.withContext do
-          addMessageContext $ toMessageData (← initialGoal.getType)
-      return m!"{exceptRuleResultToEmoji (·.toEmoji) result} (G{id}) [{priority.toHumanString}] ⋯ ⊢ {tgt}"
+-- def expandNextGoal' : SearchM Q (Array MVarId) := do
+--   let gref ← nextActiveGoal
+--   let g ← gref.get
+--   let (initialGoal, initialMetaState) ←
+--     g.currentGoalAndMetaState (← getRootMetaState)
+--   let result ← withAesopTraceNode .steps
+--     (fmt g.id g.priority initialGoal initialMetaState) do
+--     initialMetaState.runMetaM' do
+--       aesop_trace[steps] "Initial goal:{indentD initialGoal}"
+--     let maxRappDepth := (← read).options.maxRuleApplicationDepth
+--     if maxRappDepth != 0 && (← gref.get).depth >= maxRappDepth then
+--       aesop_trace[steps] "Treating the goal as unprovable since it is beyond the maximum rule application depth ({maxRappDepth})."
+--       gref.markForcedUnprovable
+--       setMaxRuleApplicationDepthReached
+--       return .failed
+--     let result ← expandGoal gref
+--     let currentIteration ← getIteration
+--     gref.modify λ g => g.setLastExpandedInIteration currentIteration
+--     if ← (← gref.get).isActive then
+--       enqueueGoals #[gref]
+--     return result
+--   match result with
+--   | .proved newRapps | .succeeded newRapps =>
+--     traceNewRapps newRapps
+--     let rs ← newRapps.mapM (·.get)
+--     let grs ← rs.flatMapM (·.subgoals)
+--     let activeGrs ← grs.filterM (fun g => do (← g.get).isActive)
+--     return activeGrs
+--   | .failed => return #[]
+--   where
+--     fmt (id : GoalId) (priority : Percent) (initialGoal : MVarId)
+--         (initialMetaState : Meta.SavedState)
+--         (result : Except Exception RuleResult) : SearchM Q MessageData := do
+--       let tgt ← initialMetaState.runMetaM' do
+--         initialGoal.withContext do
+--           addMessageContext $ toMessageData (← initialGoal.getType)
+--       return m!"{exceptRuleResultToEmoji (·.toEmoji) result} (G{id}) [{priority.toHumanString}] ⋯ ⊢ {tgt}"
 
-    traceNewRapps (newRapps : Array RappRef) : SearchM Q Unit := do
-      aesop_trace[steps] do
-        for rref in newRapps do
-          let r ← rref.get
-          r.withHeadlineTraceNode .steps
-            (transform := λ msg => return m!"{newNodeEmoji} " ++ msg) do
-            withAesopTraceNode .steps (λ _ => return "Metadata") do
-              r.traceMetadata .steps
-          r.metaState.runMetaM' do
-            r.forSubgoalsM λ gref => do
-              let g ← gref.get
-              g.withHeadlineTraceNode .steps
-                (transform := λ msg => return m!"{newNodeEmoji} " ++ msg) do
-                aesop_trace![steps] g.preNormGoal
-                withAesopTraceNode .steps (λ _ => return "Metadata") do
-                  g.traceMetadata .steps
+--     traceNewRapps (newRapps : Array RappRef) : SearchM Q Unit := do
+--       aesop_trace[steps] do
+--         for rref in newRapps do
+--           let r ← rref.get
+--           r.withHeadlineTraceNode .steps
+--             (transform := λ msg => return m!"{newNodeEmoji} " ++ msg) do
+--             withAesopTraceNode .steps (λ _ => return "Metadata") do
+--               r.traceMetadata .steps
+--           r.metaState.runMetaM' do
+--             r.forSubgoalsM λ gref => do
+--               let g ← gref.get
+--               g.withHeadlineTraceNode .steps
+--                 (transform := λ msg => return m!"{newNodeEmoji} " ++ msg) do
+--                 aesop_trace![steps] g.preNormGoal
+--                 withAesopTraceNode .steps (λ _ => return "Metadata") do
+--                   g.traceMetadata .steps
 
 def checkGoalLimit : SearchM Q (Option MessageData) := do
   let maxGoals := (← read).options.maxGoals
@@ -342,47 +342,133 @@ def search (goal : MVarId) (ruleSet? : Option LocalRuleSet := none)
     go.run ruleSet options simpConfig simpConfigSyntax? goal |>.run stats
   return (goals, stats)
 
--- TODO: do we want to throw away all tracking of, e.g., max rapps? we did here
-partial def searchOne : SearchM Q (Array MVarId) := do
-  checkSystem "aesop"
-  if let (some err) ← checkRootUnprovable then
-    handleNonfatalError err
-  else
-    let grs ← expandNextGoal'
-    checkInvariantsIfEnabled
-    incrementIteration
-    if ← finishIfProven then
-      return #[]
-    else
-      grs.flatMapM (fun g => handleNonfatalError m!"Stepped aesop once." false (some g))
+--
 
-def searchStep (goal : MVarId) (ruleSet? : Option LocalRuleSet := none)
-     (options : Aesop.Options :=
-      {maxRuleApplicationDepth := 0,
-       maxRuleApplications := 0,
-       maxGoals := 0,
-       --  maxSafePrefixRuleApplications := 0,
-       terminal := false,
-       warnOnNonterminal := false,
-       traceScript := true})
-     (simpConfig : Simp.Config := {})
-     (simpConfigSyntax? : Option Term := none) (stats : Stats := {}) :
-     MetaM (Array MVarId × Stats) := do
-  goal.checkNotAssigned `aesop
-  let options ← options.toOptions'
-  let ruleSet ←
-    match ruleSet? with
-    | none =>
-        let rss ← Frontend.getDefaultGlobalRuleSets
-        mkLocalRuleSet rss options
-    | some ruleSet => pure ruleSet
-  let ⟨Q, _⟩ := options.queue
-  let go : SearchM _ _ := do
-    show SearchM Q _ from
-    try searchOne
-    finally freeTree
-  let ((goals, _, _), stats) ←
-    go.run ruleSet options simpConfig simpConfigSyntax? goal |>.run stats
-  return (goals, stats)
+set_option pp.sanitizeNames true in
+open PrettyPrinter Lean.Parser.Tactic in
+def fmtTactic
+  (t : TSyntax `tactic)
+  (subgoals : List MVarId)
+  (continuation : String) : String :=
+    let prettyT :=
+      match t.raw.reprint with
+      | some x => x
+      | none => t.raw.prettyPrint.pretty -- TODO
+    match subgoals with
+    | [] => prettyT
+    | [_] => prettyT ++ "\n  " ++ continuation
+    | _ =>
+      let continuations := subgoals.map (fun _ => "\n  ." ++ continuation)
+      let continuationsCat := continuations.foldr (· ++ ·) ""
+      prettyT ++ continuationsCat
+
+def suggestTacticOptions
+  (stx : Syntax)
+  (rs : List (TSyntax `tactic × List MVarId))
+  (continuation: String)
+  : MetaM Unit := do
+  match rs with
+  | [] => throwError "Empty tactic list; nothing to suggest."
+  | [(t, [])] =>
+    Tactic.TryThis.addSuggestion stx
+      s!"{fmtTactic t [] continuation}"
+  | [(t, gs)] =>
+    Tactic.TryThis.addSuggestion stx
+      s!"{fmtTactic t gs continuation}"
+  | _ =>
+    match rs.find? (fun (_, unsolved) => List.length unsolved == 0) with
+    | some (t, gs) =>
+      Tactic.TryThis.addSuggestion stx s!"{fmtTactic t gs continuation}"
+    | none => do
+      let prettyRs ← rs.mapM
+        (fun (t, gs) => return fmtTactic t gs continuation)
+      Tactic.TryThis.addSuggestions stx prettyRs.toArray (header := "Try one of:")
+
+def peekTactic (tactic : TSyntax `tactic) (g : MVarId) : TacticM (Option (List MVarId)) := do
+  let prettyT := fmtTactic tactic [] ""-- TODO
+  let s ← saveState
+  try
+    let unsolved ← Elab.Tactic.evalTacticAt tactic g
+    match unsolved with
+    | [g'] => do
+      let τ ← g.getType
+      let τ' ← g'.getType
+      let unchanged ← withoutModifyingState $ Lean.Meta.isDefEq τ τ'
+      if unchanged then
+        IO.println s!"1: did NOT catch exception for {prettyT}"
+        pure none
+      else
+        IO.println s!"2: did NOT catch exception for {prettyT}"
+        pure $ some unsolved
+    | _ =>
+      IO.println s!"3: did NOT catch exception for {prettyT}; num subgoals: {unsolved.length}"
+      pure $ some unsolved
+  catch _ =>
+    IO.println s!"4: caught exception for {prettyT}"
+    pure none
+  finally
+    restoreState s
+
+
+def handleNonfatalError' (err : MessageData) (failIfNoProgress := true) (goal : Option GoalRef := none): SearchM Q (Array MVarId) := do
+  logWarning m!"root: {← (← getRootMVarId).getType}"
+  let safeExpansionSuccess ← match goal with
+    | none => expandSafePrefix
+    | some g => expandSafePrefixForGoal g
+  let safeGoals ← match goal with
+    | none => extractSafePrefix
+    | some g => (← g.get).extractSafePrefix
+  aesop_trace[proof] do
+    match ← getProof? with
+    | some proof =>
+      (← getRootMVarId).withContext do
+        aesop_trace![proof] "{proof}"
+    | none => aesop_trace![proof] "<no proof>"
+  traceTree
+  traceScript (completeProof := false)
+  let opts := (← read).options
+  if opts.terminal then
+    throwAesopEx (← getRootMVarId) safeGoals safeExpansionSuccess err
+  if ! (← treeHasProgress) && failIfNoProgress then
+    throwAesopEx (← getRootMVarId) #[] safeExpansionSuccess m!"made no progress"
+  if opts.warnOnNonterminal then
+    logWarning m!"aesop: {err}"
+  if ! safeExpansionSuccess then
+    logWarning m!"aesop: safe prefix was not fully expanded because the maximum number of rule applications ({(← read).options.maxSafePrefixRuleApplications}) was reached."
+  safeGoals.mapM (clearForwardImplDetailHyps ·)
+
+def step (g : MVarId) (ruleSet : LocalRuleSet) : TacticM (Array MVarId) := do
+    let ts := ruleSet.toList
+    let rs ← List.filterMapM (fun t => do
+      let unsolved ← peekTactic t g
+      match unsolved with
+      | some gs =>
+        let res := some (t, gs)
+        pure res
+      | none => pure none) ts
+    if (rs.length == 0)
+      then
+        if ts.length == 0 then
+          throwTacticEx `step g m!"No tactic options provided."
+        else throwTacticEx `step g m!"All tactics failed."
+      else
+        let prettyTs ← ts.mapM (fun t => return fmtTactic t [] "")
+        suggestTacticOptions stx rs s!"step {prettyTs}"
+
+-- -- TODO: do we want to throw away all tracking of, e.g., max rapps? we did here
+-- partial def searchOne : SearchM Q (Array MVarId) := do
+--   checkSystem "aesop"
+--   if let (some err) ← checkRootUnprovable then
+--     handleNonfatalError err
+--   else
+--     let grs ← expandNextGoal'
+--     --
+--     -- incrementIteration
+--     if ← finishIfProven then
+--       return #[]
+--     else
+--       for g in grs do
+--         logWarning m!"logging goal: {← (← g.get).currentGoal.getType}"
+--       grs.flatMapM (fun g => handleNonfatalError' m!"Stepped aesop once." false (some g))
 
 end Aesop
