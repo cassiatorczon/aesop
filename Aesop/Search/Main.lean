@@ -277,7 +277,7 @@ def throwAesopEx (mvarId : MVarId) (remainingSafeGoals : Array MVarId)
 -- sibling being unprovable, without the goal ever being expanded. So if we did
 -- not expand the safe rules after the fact, the tactic's output would be
 -- sensitive to minor changes in, e.g., rule priority.
-def handleNonfatalError (err : MessageData) (goal : Option GoalRef := none): SearchM Q (Array MVarId) := do
+def handleNonfatalError (err : MessageData) (failIfNoProgress := true) (goal : Option GoalRef := none): SearchM Q (Array MVarId) := do
   logWarning m!"root: {← (← getRootMVarId).getType}"
   let safeExpansionSuccess ← match goal with
     | none => expandSafePrefix
@@ -296,7 +296,7 @@ def handleNonfatalError (err : MessageData) (goal : Option GoalRef := none): Sea
   let opts := (← read).options
   if opts.terminal then
     throwAesopEx (← getRootMVarId) safeGoals safeExpansionSuccess err
-  if ! (← treeHasProgress) then
+  if ! (← treeHasProgress) && failIfNoProgress then
     throwAesopEx (← getRootMVarId) #[] safeExpansionSuccess m!"made no progress"
   if opts.warnOnNonterminal then
     logWarning m!"aesop: {err}"
@@ -354,7 +354,7 @@ partial def searchOne : SearchM Q (Array MVarId) := do
     if ← finishIfProven then
       return #[]
     else
-      grs.flatMapM (fun g => handleNonfatalError m!"Stepped aesop once." (some g))
+      grs.flatMapM (fun g => handleNonfatalError m!"Stepped aesop once." false (some g))
 
 def searchStep (goal : MVarId) (ruleSet? : Option LocalRuleSet := none)
      (options : Aesop.Options :=
