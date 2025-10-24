@@ -58,7 +58,7 @@ where
         ruleSet.trace .ruleSet
       profiling (λ s _ t => { s with search := t }) do
         let (goals, stats) ←
-          search goal ruleSet config.options config.simpConfig --
+          searchStep goal ruleSet config.options config.simpConfig --
             config.simpConfigSyntax? (← getStats)
         replaceMainGoal goals.toList
         modifyStats λ _ => stats
