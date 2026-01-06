@@ -609,4 +609,15 @@ def mkLocalRuleSet (rss : Array (GlobalRuleSet × Name × Name))
   else
     return result
 
+-- CHT TODO add other invertible rules
+def invertibleSubset (rs : LocalRuleSet) : LocalRuleSet :=
+  let srs := rs.safeRules
+  let nrs := rs.normRules
+  {LocalRuleSet.empty with normRules := nrs, safeRules := srs}
+
+-- CHT TODO add other noninvertible rules
+def noninvertibleSubset (rs : LocalRuleSet) : LocalRuleSet :=
+  let urs := rs.unsafeRules
+  {LocalRuleSet.empty with unsafeRules := urs}
+
 end Aesop
